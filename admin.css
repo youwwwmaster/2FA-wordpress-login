@@ -1,0 +1,83 @@
+/* Freepass 2FA Admin Styles */
+
+.wrap h1 {
+    color: #1d2327;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+.form-table th {
+    font-weight: 600;
+    color: #1d2327;
+    width: 200px;
+}
+
+.notice-success {
+    border-left-color: #00a32a;
+    background: #edfaef;
+    border-radius: 4px;
+    padding: 12px;
+    margin: 20px 0;
+}
+
+#qr-display {
+    text-align: center;
+    padding: 20px;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+#qr-display img {
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    background: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    max-width: 200px;
+}
+
+#qr-display code {
+    background: #f1f1f1;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 14px;
+    letter-spacing: 2px;
+}
+
+.freepass-info {
+    margin-top: 30px;
+    background: #f8f9fa;
+    border: 1px solid #e1e3e6;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.freepass-info h2 {
+    margin-top: 0;
+    color: #1d2327;
+    font-size: 18px;
+}
+
+.freepass-info ol {
+    margin: 16px 0;
+    padding-left: 20px;
+}
+
+.freepass-info ol li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+.button-primary {
+    background: #007cba;
+    border-color: #007cba;
+    border-radius: 4px;
+}
+
+.button-primary:hover {
+    background: #005a87;
+    border-color: #005a87;
+}
