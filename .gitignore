@@ -1,0 +1,36 @@
+# Временные файлы проекта
+CONTEXT.md
+
+# WordPress
+wp-config.php
+.htaccess
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+._*
+
+# Logs
+*.log
+error_log
+debug.log
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Node modules (если будешь использовать npm)
+node_modules/
+
+# Composer (если будешь использовать)
+vendor/
+
+# Build files
+*.zip
