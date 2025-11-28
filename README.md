@@ -97,6 +97,20 @@ For issues, questions, or feature requests, please use the [GitHub Issues](https
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## ☕ Support the Project
+
+If you find Guardian 2FA useful and want to support its development, consider buying me a coffee (or beer, or cat treats 😺):
+
+### One-time Support
+- 🍺 [Beer & Cat Treats - $5](https://buy.stripe.com/aFa28r9290t35hjbxpgMw0k)
+- 🍕 [Pizza Power - $10](https://buy.stripe.com/5kQ3cv5PXfnX39bbxpgMw0l)
+- 🌟 [You're a Legend - $50](https://buy.stripe.com/14AbJ14LT3FfeRT44XgMw0m)
+
+### Monthly Support
+- 🙌 [Monthly High-Five Club - $5/month](https://buy.stripe.com/7sY7sLemt6Rrh01591gMw0j)
+
+Your support helps maintain and improve this plugin. Every contribution, no matter the size, is greatly appreciated! ❤️
+
 ## License
 
 This plugin is licensed under GPL v2 or later.
