@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name: Freepass 2FA
+ * Plugin Name: Guardian 2FA
  * Plugin URI: https://trueresort.com
- * Description: Simple two-factor authentication plugin for WordPress login.
- * Version: 1.0.0
+ * Description: Per-user two-factor authentication (TOTP) for WordPress login.
+ * Version: 0.2.0
  * Author: Mike Art (@trueresort)
  * Author URI: https://trueresort.com
  * License: GPL v2 or later
@@ -13,171 +13,279 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('FREEPASS_VERSION', '1.0.0');
+define('FREEPASS_VERSION', '0.2.0');
 define('FREEPASS_URL', plugin_dir_url(__FILE__));
 define('FREEPASS_PATH', plugin_dir_path(__FILE__));
 
 class Freepass_2FA {
-    
+
+    const META_SECRET    = 'freepass_2fa_secret';
+    const META_PENDING   = 'freepass_2fa_pending_secret';
+    const META_LAST_STEP = 'freepass_2fa_last_step';
+    const COOKIE         = 'freepass_2fa_token';
+    const LOGIN_TTL      = 600;
+    const MAX_ATTEMPTS   = 5;
+
     public function __construct() {
-        add_action('init', array($this, 'init'));
         add_action('admin_menu', array($this, 'admin_menu'));
         add_action('admin_enqueue_scripts', array($this, 'admin_assets'));
+
+        // Login flow
         add_action('wp_login', array($this, 'handle_login'), 10, 2);
-        add_action('init', array($this, 'handle_2fa_verify'));
-        add_action('login_enqueue_scripts', array($this, 'login_assets'));
-        add_action('wp_ajax_freepass_generate_secret', array($this, 'ajax_generate_secret'));
-        
+        add_action('login_init', array($this, 'handle_2fa_verify'));
+        add_filter('authenticate', array($this, 'block_xmlrpc_for_2fa_users'), 100, 1);
+
+        // Per-user setup in the profile
+        add_action('show_user_profile', array($this, 'profile_section'));
+        add_action('edit_user_profile', array($this, 'profile_section'));
+        add_action('personal_options_update', array($this, 'profile_save'));
+        add_action('edit_user_profile_update', array($this, 'profile_save'));
+
         register_activation_hook(__FILE__, array($this, 'activate'));
     }
-    
-    public function init() {
-        if (!get_option('freepass_version')) {
-            add_option('freepass_enabled', 0);
-            add_option('freepass_secret', '');
-            add_option('freepass_version', FREEPASS_VERSION);
-        }
-    }
-    
+
+    /* ---------------------------------------------------------------------
+     * Settings
+     * ------------------------------------------------------------------- */
+
     public function admin_menu() {
-        add_options_page(
-            'Freepass 2FA',
-            'Freepass 2FA',
-            'manage_options',
-            'freepass-settings',
-            array($this, 'settings_page')
-        );
+        add_options_page('Guardian 2FA', 'Guardian 2FA', 'manage_options', 'freepass-settings', array($this, 'settings_page'));
     }
-    
+
     public function admin_assets($hook) {
-        if ($hook !== 'settings_page_freepass-settings') {
-            return;
+        if (in_array($hook, array('settings_page_freepass-settings', 'profile.php', 'user-edit.php'), true)) {
+            wp_enqueue_style('freepass-admin', FREEPASS_URL . 'admin.css', array(), FREEPASS_VERSION);
         }
-        
-        wp_enqueue_style('freepass-admin', FREEPASS_URL . 'admin.css', array(), FREEPASS_VERSION);
-        wp_enqueue_script('freepass-admin', FREEPASS_URL . 'admin.js', array('jquery'), FREEPASS_VERSION, true);
-        
-        wp_localize_script('freepass-admin', 'freepass_ajax', array(
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('freepass_nonce')
-        ));
     }
-    
-    public function login_assets() {
-        wp_enqueue_style('freepass-login', FREEPASS_URL . '2fa-form.css', array(), FREEPASS_VERSION);
-    }
-    
+
     public function settings_page() {
-        if ($_POST && check_admin_referer('freepass_settings')) {
-            $enabled = isset($_POST['enabled']) ? 1 : 0;
-            update_option('freepass_enabled', $enabled);
-            
-            echo '<div class="notice notice-success"><p>Settings saved!</p></div>';
+        if (!current_user_can('manage_options')) {
+            wp_die(esc_html__('You do not have access to this page.'));
         }
-        
-        $enabled = get_option('freepass_enabled', 0);
-        $secret = get_option('freepass_secret', '');
+
+        if (isset($_POST['freepass_settings_submit']) && check_admin_referer('freepass_settings')) {
+            update_option('freepass_enabled', isset($_POST['enabled']) ? 1 : 0);
+            echo '<div class="notice notice-success"><p>Settings saved.</p></div>';
+        }
+
+        $enabled = (int) get_option('freepass_enabled', 0);
         ?>
         <div class="wrap">
-            <h1>Freepass 2FA Settings</h1>
-            
+            <h1>Guardian 2FA Settings</h1>
             <form method="post">
                 <?php wp_nonce_field('freepass_settings'); ?>
-                
                 <table class="form-table">
                     <tr>
                         <th>Enable 2FA</th>
                         <td>
                             <label>
-                                <input type="checkbox" name="enabled" value="1" <?php checked($enabled); ?>>
-                                Enable two-factor authentication for all users
+                                <input type="checkbox" name="enabled" value="1" <?php checked($enabled, 1); ?>>
+                                Require a 2FA code at login for every user who has set up 2FA
                             </label>
                         </td>
                     </tr>
-                    
-                    <?php if ($enabled): ?>
-                    <tr>
-                        <th>QR Code Setup</th>
-                        <td>
-                            <?php if ($secret): ?>
-                                <div id="qr-display">
-                                    <img src="<?php echo esc_attr($this->get_qr_url($secret)); ?>" alt="QR Code">
-                                    <p>Scan this QR code with Google Authenticator app</p>
-                                    <p><strong>Secret Key:</strong> <code><?php echo esc_html($secret); ?></code></p>
-                                </div>
-                            <?php else: ?>
-                                <button type="button" id="generate-secret" class="button button-primary">Generate QR Code</button>
-                                <div id="qr-display" style="display: none;"></div>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                    <?php endif; ?>
                 </table>
-                
-                <?php submit_button(); ?>
+                <?php submit_button('Save Changes', 'primary', 'freepass_settings_submit'); ?>
             </form>
-            
-            <?php if ($enabled): ?>
             <div class="freepass-info">
-                <h2>Instructions</h2>
+                <h2>How it works</h2>
                 <ol>
-                    <li>Install Google Authenticator app on your phone</li>
-                    <li>Scan the QR code above or enter the secret key manually</li>
-                    <li>Use the 6-digit code from the app when logging in</li>
+                    <li>Each user sets up 2FA in <strong>Users → Profile → Guardian 2FA</strong> with their own authenticator app.</li>
+                    <li>Users who have not set up 2FA log in with their password only.</li>
+                    <li>Administrators can turn off 2FA for a user on that user's profile page.</li>
                 </ol>
             </div>
-            <?php endif; ?>
         </div>
         <?php
     }
-    
+
+    /* ---------------------------------------------------------------------
+     * Profile: per-user setup
+     * ------------------------------------------------------------------- */
+
+    public function profile_section($user) {
+        if (!current_user_can('edit_user', $user->ID)) {
+            return;
+        }
+        $is_self = get_current_user_id() === (int) $user->ID;
+        $secret  = get_user_meta($user->ID, self::META_SECRET, true);
+        wp_nonce_field('freepass_profile_' . $user->ID, 'freepass_profile_nonce');
+        ?>
+        <h2 id="guardian-2fa">Guardian 2FA</h2>
+        <table class="form-table" role="presentation">
+        <?php if ($secret): ?>
+            <tr>
+                <th>Status</th>
+                <td>
+                    <p><strong>2FA is active</strong> for this account.</p>
+                    <label><input type="checkbox" name="freepass_disable" value="1"> Turn off 2FA for this account</label>
+                </td>
+            </tr>
+        <?php elseif ($is_self): ?>
+            <?php
+            $pending = get_user_meta($user->ID, self::META_PENDING, true);
+            if (!$pending) {
+                $pending = $this->generate_secret();
+                update_user_meta($user->ID, self::META_PENDING, $pending);
+            }
+            ?>
+            <tr>
+                <th>Set up 2FA</th>
+                <td>
+                    <div id="qr-display">
+                        <img src="<?php echo esc_attr($this->get_qr_url($pending, $user)); ?>" alt="QR code">
+                        <p>Scan this QR code with an authenticator app, or enter the key manually:</p>
+                        <p><code><?php echo esc_html($pending); ?></code></p>
+                    </div>
+                    <label for="freepass_confirm_code">Code from the app</label><br>
+                    <input type="text" name="freepass_confirm_code" id="freepass_confirm_code" inputmode="numeric" maxlength="6" autocomplete="off">
+                    <p class="description">Enter the 6-digit code and click <strong>Update Profile</strong> to turn on 2FA.</p>
+                </td>
+            </tr>
+        <?php else: ?>
+            <tr>
+                <th>Status</th>
+                <td><p>2FA is not set up. The user sets it up on their own profile page.</p></td>
+            </tr>
+        <?php endif; ?>
+        </table>
+        <?php
+    }
+
+    public function profile_save($user_id) {
+        if (!current_user_can('edit_user', $user_id)) {
+            return;
+        }
+        if (!isset($_POST['freepass_profile_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['freepass_profile_nonce'])), 'freepass_profile_' . $user_id)) {
+            return;
+        }
+
+        if (!empty($_POST['freepass_disable'])) {
+            delete_user_meta($user_id, self::META_SECRET);
+            delete_user_meta($user_id, self::META_PENDING);
+            delete_user_meta($user_id, self::META_LAST_STEP);
+            return;
+        }
+
+        $code = isset($_POST['freepass_confirm_code']) ? preg_replace('/\D/', '', wp_unslash($_POST['freepass_confirm_code'])) : '';
+        if ($code === '' || get_current_user_id() !== (int) $user_id) {
+            return;
+        }
+
+        $pending = get_user_meta($user_id, self::META_PENDING, true);
+        $step    = $pending ? $this->verify_totp($pending, $code, 0) : false;
+        if ($step === false) {
+            add_action('user_profile_update_errors', function ($errors) {
+                $errors->add('freepass_code', '<strong>Guardian 2FA:</strong> the code is invalid. 2FA was not turned on.');
+            });
+            return;
+        }
+
+        update_user_meta($user_id, self::META_SECRET, $pending);
+        update_user_meta($user_id, self::META_LAST_STEP, $step);
+        delete_user_meta($user_id, self::META_PENDING);
+    }
+
+    /* ---------------------------------------------------------------------
+     * Login flow
+     * ------------------------------------------------------------------- */
+
+    private function user_requires_2fa($user_id) {
+        return (int) get_option('freepass_enabled', 0) === 1
+            && (string) get_user_meta($user_id, self::META_SECRET, true) !== '';
+    }
+
     public function handle_login($user_login, $user) {
-        if (!get_option('freepass_enabled')) {
+        if (!$this->user_requires_2fa($user->ID)) {
             return;
         }
-        
-        $secret = get_option('freepass_secret');
-        if (empty($secret)) {
-            return;
-        }
-        
+
         wp_clear_auth_cookie();
-        set_transient('freepass_pending_user', $user->ID, 600);
-        
-        wp_redirect(wp_login_url() . '?freepass_2fa=verify');
+
+        $token = bin2hex(random_bytes(32));
+        set_transient($this->transient_key($token), array('user_id' => (int) $user->ID, 'attempts' => 0), self::LOGIN_TTL);
+        $this->set_token_cookie($token, time() + self::LOGIN_TTL);
+
+        wp_safe_redirect(add_query_arg('freepass_2fa', 'verify', wp_login_url()));
         exit;
     }
-    
+
     public function handle_2fa_verify() {
         if (!isset($_GET['freepass_2fa']) || $_GET['freepass_2fa'] !== 'verify') {
             return;
         }
-        
-        $user_id = get_transient('freepass_pending_user');
-        if (!$user_id) {
-            wp_redirect(wp_login_url());
+
+        $token   = isset($_COOKIE[self::COOKIE]) ? preg_replace('/[^a-f0-9]/', '', (string) $_COOKIE[self::COOKIE]) : '';
+        $pending = (strlen($token) === 64) ? get_transient($this->transient_key($token)) : false;
+        if (!is_array($pending) || empty($pending['user_id'])) {
+            $this->end_pending_login($token);
+            wp_safe_redirect(wp_login_url());
             exit;
         }
-        
-        $error = '';
-        
-        if ($_POST && isset($_POST['freepass_code'])) {
-            $code = sanitize_text_field($_POST['freepass_code']);
-            $secret = get_option('freepass_secret');
-            
-            if ($this->verify_totp($secret, $code)) {
-                delete_transient('freepass_pending_user');
-                wp_set_auth_cookie($user_id, true);
-                wp_redirect(admin_url());
+
+        $user_id = (int) $pending['user_id'];
+        $error   = '';
+
+        if (isset($_POST['freepass_code'])) {
+            $code   = preg_replace('/\D/', '', wp_unslash($_POST['freepass_code']));
+            $secret = get_user_meta($user_id, self::META_SECRET, true);
+            $last   = (int) get_user_meta($user_id, self::META_LAST_STEP, true);
+            $step   = $secret ? $this->verify_totp($secret, $code, $last) : false;
+
+            if ($step !== false) {
+                update_user_meta($user_id, self::META_LAST_STEP, $step);
+                $this->end_pending_login($token);
+                wp_set_auth_cookie($user_id, false);
+                wp_safe_redirect(admin_url());
                 exit;
-            } else {
-                $error = 'Invalid authentication code';
             }
+
+            $pending['attempts']++;
+            if ($pending['attempts'] >= self::MAX_ATTEMPTS) {
+                $this->end_pending_login($token);
+                wp_safe_redirect(add_query_arg('freepass_2fa', 'locked', wp_login_url()));
+                exit;
+            }
+            set_transient($this->transient_key($token), $pending, self::LOGIN_TTL);
+            $error = 'Invalid authentication code. Attempts left: ' . (self::MAX_ATTEMPTS - $pending['attempts']) . '.';
         }
-        
+
         $this->show_2fa_form($error);
     }
-    
+
+    /**
+     * XML-RPC login does not pass through the 2FA form, so it is refused
+     * for users who have 2FA set up.
+     */
+    public function block_xmlrpc_for_2fa_users($user) {
+        if (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST && $user instanceof WP_User && $this->user_requires_2fa($user->ID)) {
+            return new WP_Error('freepass_2fa_xmlrpc', 'XML-RPC login is disabled for accounts with 2FA.');
+        }
+        return $user;
+    }
+
+    private function transient_key($token) {
+        return 'freepass_2fa_' . hash('sha256', $token);
+    }
+
+    private function set_token_cookie($value, $expires) {
+        setcookie(self::COOKIE, $value, array(
+            'expires'  => $expires,
+            'path'     => COOKIEPATH ? COOKIEPATH : '/',
+            'domain'   => COOKIE_DOMAIN,
+            'secure'   => is_ssl(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ));
+    }
+
+    private function end_pending_login($token) {
+        if ($token !== '') {
+            delete_transient($this->transient_key($token));
+        }
+        $this->set_token_cookie('', time() - 3600);
+    }
+
     private function show_2fa_form($error = '') {
         ?>
         <!DOCTYPE html>
@@ -186,33 +294,33 @@ class Freepass_2FA {
             <meta charset="<?php bloginfo('charset'); ?>">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <title><?php bloginfo('name'); ?> - Two-Factor Authentication</title>
-            <link rel="stylesheet" href="<?php echo FREEPASS_URL; ?>2fa-form.css?v=<?php echo FREEPASS_VERSION; ?>">
+            <link rel="stylesheet" href="<?php echo esc_url(FREEPASS_URL . '2fa-form.css?v=' . FREEPASS_VERSION); ?>">
         </head>
         <body class="freepass-2fa-page">
             <div id="freepass-container">
                 <h1 class="freepass-title"><a href="<?php echo esc_url(home_url('/')); ?>"><?php bloginfo('name'); ?></a></h1>
-                
+
                 <form method="post" class="freepass-form">
                     <p class="freepass-field">
                         <label for="freepass_code" class="freepass-label">Authentication Code</label>
-                        <input type="text" name="freepass_code" id="freepass_code" class="freepass-input" maxlength="6" 
-                               placeholder="000000" autofocus required autocomplete="off">
+                        <input type="text" name="freepass_code" id="freepass_code" class="freepass-input" maxlength="6"
+                               inputmode="numeric" placeholder="000000" autofocus required autocomplete="one-time-code">
                     </p>
-                    
+
                     <?php if ($error): ?>
                     <div class="freepass-error"><?php echo esc_html($error); ?></div>
                     <?php endif; ?>
-                    
+
                     <p class="freepass-submit">
                         <input type="submit" value="Verify Code" class="freepass-button">
                     </p>
                 </form>
-                
+
                 <p class="freepass-nav">
                     <a href="<?php echo esc_url(wp_login_url()); ?>" class="freepass-link">← Back to Login</a>
                 </p>
             </div>
-            
+
             <script>
                 document.getElementById('freepass_code').addEventListener('input', function(e) {
                     e.target.value = e.target.value.replace(/[^0-9]/g, '');
@@ -226,102 +334,100 @@ class Freepass_2FA {
         <?php
         exit;
     }
-    
-    public function ajax_generate_secret() {
-        if (!wp_verify_nonce($_POST['nonce'], 'freepass_nonce') || !current_user_can('manage_options')) {
-            wp_die();
-        }
-        
-        $secret = $this->generate_secret();
-        update_option('freepass_secret', $secret);
-        
-        $qr_url = $this->get_qr_url($secret);
-        
-        wp_send_json_success(array(
-            'secret' => $secret,
-            'qr' => $qr_url
-        ));
-    }
-    
+
+    /* ---------------------------------------------------------------------
+     * TOTP (RFC 6238, SHA-1, 30 s, 6 digits)
+     * ------------------------------------------------------------------- */
+
     private function generate_secret() {
-        $chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+        $chars  = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
         $secret = '';
-        for ($i = 0; $i < 16; $i++) {
+        for ($i = 0; $i < 32; $i++) {
             $secret .= $chars[random_int(0, 31)];
         }
         return $secret;
     }
-    
-    private function get_qr_url($secret) {
+
+    private function get_qr_url($secret, $user) {
         require_once FREEPASS_PATH . 'qrcode.php';
-        
-        $issuer = get_bloginfo('name');
-        $account = get_bloginfo('admin_email');
-        $qr_data = 'otpauth://totp/' . urlencode($issuer . ':' . $account) . '?secret=' . $secret . '&issuer=' . urlencode($issuer);
-        
+
+        $issuer  = get_bloginfo('name');
+        $account = $user->user_email ? $user->user_email : $user->user_login;
+        $qr_data = 'otpauth://totp/' . rawurlencode($issuer . ':' . $account) . '?secret=' . $secret . '&issuer=' . rawurlencode($issuer);
+
+        $qr    = new QRCode($qr_data);
+        $image = $qr->render_image();
         ob_start();
-        $qr = new QRCode($qr_data);
-        $qr->output_image();
-        $image_data = ob_get_contents();
-        ob_end_clean();
-        
-        return 'data:image/png;base64,' . base64_encode($image_data);
+        imagepng($image);
+        $png = ob_get_clean();
+        imagedestroy($image);
+
+        return 'data:image/png;base64,' . base64_encode($png);
     }
-    
-    private function verify_totp($secret, $code) {
-        $time = floor(time() / 30);
-        
+
+    /**
+     * Returns the matched time step, or false. Steps at or below $last_step
+     * are rejected, so a code cannot be used twice.
+     */
+    private function verify_totp($secret, $code, $last_step) {
+        if (!preg_match('/^\d{6}$/', (string) $code)) {
+            return false;
+        }
+        $now = (int) floor(time() / 30);
         for ($i = -1; $i <= 1; $i++) {
-            $calculated = $this->calculate_totp($secret, $time + $i);
-            if ($calculated === str_pad($code, 6, '0', STR_PAD_LEFT)) {
-                return true;
+            $step = $now + $i;
+            if ($step <= $last_step) {
+                continue;
+            }
+            if (hash_equals($this->calculate_totp($secret, $step), $code)) {
+                return $step;
             }
         }
         return false;
     }
-    
-    private function calculate_totp($secret, $time) {
-        $secret = $this->base32_decode($secret);
-        $time = pack('N*', 0, $time);
-        $hash = hash_hmac('sha1', $time, $secret, true);
+
+    private function calculate_totp($secret, $step) {
+        $key    = $this->base32_decode($secret);
+        $time   = pack('N*', 0, $step);
+        $hash   = hash_hmac('sha1', $time, $key, true);
         $offset = ord($hash[19]) & 0xf;
-        
+
         $code = (
             ((ord($hash[$offset + 0]) & 0x7f) << 24) |
             ((ord($hash[$offset + 1]) & 0xff) << 16) |
             ((ord($hash[$offset + 2]) & 0xff) << 8) |
             (ord($hash[$offset + 3]) & 0xff)
         ) % 1000000;
-        
-        return str_pad($code, 6, '0', STR_PAD_LEFT);
+
+        return str_pad((string) $code, 6, '0', STR_PAD_LEFT);
     }
-    
+
     private function base32_decode($input) {
         $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-        $output = '';
-        $v = 0;
-        $vbits = 0;
-        
+        $output   = '';
+        $v        = 0;
+        $vbits    = 0;
+
         for ($i = 0; $i < strlen($input); $i++) {
             $value = strpos($alphabet, $input[$i]);
-            if ($value === false) continue;
-            
-            $v = ($v << 5) | $value;
+            if ($value === false) {
+                continue;
+            }
+            $v = (($v << 5) | $value) & 0xFFFFFF;
             $vbits += 5;
-            
             if ($vbits >= 8) {
                 $output .= chr(($v >> ($vbits - 8)) & 255);
                 $vbits -= 8;
             }
         }
-        
         return $output;
     }
-    
+
     public function activate() {
         add_option('freepass_enabled', 0);
-        add_option('freepass_secret', '');
         add_option('freepass_version', FREEPASS_VERSION);
+        // The site-wide secret from 0.1.x is not used any more.
+        delete_option('freepass_secret');
     }
 }
 

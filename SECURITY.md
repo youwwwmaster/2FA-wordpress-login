@@ -6,8 +6,8 @@ We release patches for security vulnerabilities. Currently supported versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1   | :x:                |
+| 0.2.x   | :white_check_mark: |
+| < 0.2   | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -18,7 +18,7 @@ If you discover a security vulnerability in Guardian 2FA, please report it priva
 ### How to Report
 
 1. **Email:** Send details to the repository owner (check GitHub profile)
-2. **GitHub Security Advisory:** Use [GitHub's private vulnerability reporting](https://github.com/youwwwmaster/2FA-wordpress-login/security/advisories/new)
+2. **GitHub Security Advisory:** Use [GitHub's private vulnerability reporting](https://github.com/Asia-Dev-Team/2FA-wordpress-login/security/advisories/new)
 
 ### What to Include
 
@@ -46,15 +46,16 @@ When using Guardian 2FA:
 
 1. **Keep Updated:** Always use the latest version
 2. **Strong Passwords:** 2FA is additional security, not a replacement for strong passwords
-3. **Backup Codes:** Store backup codes securely (feature coming soon)
+3. **Lost phone:** An administrator can turn off 2FA for the user on their profile page
 4. **HTTPS:** Always use HTTPS on your WordPress site
 5. **Regular Backups:** Maintain regular site backups
 
 ## Known Security Considerations
 
-- Secret keys are stored in WordPress database (encrypted)
-- QR codes are generated server-side and transmitted over HTTPS
-- Rate limiting is implemented to prevent brute force attacks
+- Secret keys are stored per user in the WordPress database in plain text
+- QR codes are generated server-side; use HTTPS
+- At most 5 code attempts per login; a code cannot be reused
+- XML-RPC login is refused for users with 2FA
 - No sensitive data is logged
 
 ## Security Updates

@@ -26,10 +26,9 @@ DEALINGS IN THE SOFTWARE.
 
 \****************************************************************************/
 
-if (realpath(__FILE__) == realpath($_SERVER['SCRIPT_FILENAME'])) {
-	$generator = new QRCode($_REQUEST['d'], $_REQUEST);
-	$generator->output_image();
-	exit(0);
+// Loaded only by the plugin; direct web access is not allowed.
+if (!defined('ABSPATH')) {
+	exit;
 }
 
 class QRCode {

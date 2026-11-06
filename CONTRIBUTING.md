@@ -8,7 +8,7 @@ We welcome contributions of all kinds: bug reports, feature requests, documentat
 
 ### 🐛 Report Bugs
 
-Found a bug? Please [open an issue](https://github.com/youwwwmaster/2FA-wordpress-login/issues/new) with:
+Found a bug? Please [open an issue](https://github.com/Asia-Dev-Team/2FA-wordpress-login/issues/new) with:
 - Clear description of the problem
 - Steps to reproduce
 - Expected vs actual behavior
@@ -17,7 +17,7 @@ Found a bug? Please [open an issue](https://github.com/youwwwmaster/2FA-wordpres
 
 ### 💡 Suggest Features
 
-Have an idea? [Open an issue](https://github.com/youwwwmaster/2FA-wordpress-login/issues/new) with:
+Have an idea? [Open an issue](https://github.com/Asia-Dev-Team/2FA-wordpress-login/issues/new) with:
 - Clear description of the feature
 - Use case and benefits
 - Possible implementation approach (optional)
@@ -34,7 +34,7 @@ Help improve our documentation:
 Want to contribute code? Great!
 
 #### Before You Start:
-1. Check existing [issues](https://github.com/youwwwmaster/2FA-wordpress-login/issues) and [pull requests](https://github.com/youwwwmaster/2FA-wordpress-login/pulls)
+1. Check existing [issues](https://github.com/Asia-Dev-Team/2FA-wordpress-login/issues) and [pull requests](https://github.com/Asia-Dev-Team/2FA-wordpress-login/pulls)
 2. For major changes, open an issue first to discuss
 3. Fork the repository
 
@@ -88,8 +88,8 @@ Check our [CHANGELOG.md](CHANGELOG.md) for planned features and current developm
 
 ## 📧 Contact
 
-- **Issues:** [GitHub Issues](https://github.com/youwwwmaster/2FA-wordpress-login/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/youwwwmaster/2FA-wordpress-login/discussions)
+- **Issues:** [GitHub Issues](https://github.com/Asia-Dev-Team/2FA-wordpress-login/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Asia-Dev-Team/2FA-wordpress-login/discussions)
 
 ## 📄 License
 

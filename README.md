@@ -1,101 +1,80 @@
 # Guardian 2FA
 
-🔐 Advanced Two-Factor Authentication plugin for WordPress with multiple authentication methods.
+🔐 Per-user two-factor authentication (TOTP) for WordPress login.
 
 ## Description
 
-Guardian 2FA adds an extra layer of security to your WordPress site by requiring users to enter a second factor in addition to their regular password. Supports multiple authentication methods and flexible admin controls.
+Guardian 2FA asks for a 6-digit code from an authenticator app after the regular password. Each user sets up their own secret on their profile page; users who have not set up 2FA log in with their password only.
 
 ## Features
 
 ### Current Features
-- ✅ Two-factor authentication via Google Authenticator (TOTP)
-- ✅ QR code generation for easy setup
-- ✅ User-friendly admin interface
-- ✅ Per-user 2FA settings
+- ✅ Per-user TOTP secrets (RFC 6238: SHA-1, 30 seconds, 6 digits), set up and confirmed on the user's profile page
+- ✅ QR code and manual key for setup
+- ✅ Site-wide switch to turn the 2FA step on or off
+- ✅ Pending login bound to the browser (random HttpOnly cookie, valid 10 minutes)
+- ✅ At most 5 code attempts per login
+- ✅ A code cannot be used twice
+- ✅ XML-RPC login refused for users with 2FA
+- ✅ Administrators can turn off 2FA for a user (for a lost phone)
 
 ### Planned Features (Roadmap)
 - 🔄 Admin controls to enforce 2FA for specific user roles
 - 🔄 Backup codes for account recovery
 - 🔄 Email-based 2FA as alternative to authenticator apps
-- 🔄 SMS-based 2FA (optional)
 - 🔄 Trusted devices management
 - 🔄 2FA usage statistics for admins
 
 ## Requirements
 
 - WordPress 5.0 or higher
-- PHP 7.4 or higher
-- Google Authenticator app (iOS/Android) or compatible TOTP app
+- PHP 7.4 or higher with the `gd` extension (QR code image)
+- Google Authenticator, Microsoft Authenticator, Authy, or any TOTP app
 
 ## Installation
 
-1. Download the plugin
-2. Upload `guardian-2fa` folder to `/wp-content/plugins/` directory
-3. Activate the plugin through the 'Plugins' menu in WordPress
-4. Configure 2FA in your user profile settings
+1. Upload the `guardian-2fa` folder to `/wp-content/plugins/`
+2. Activate **Guardian 2FA** in **Plugins**
+3. Turn on 2FA in **Settings → Guardian 2FA**
+4. Each user sets up 2FA in **Users → Profile**
 
 ## Usage
 
-### For Users:
+### Set up 2FA for your account
+1. Go to **Users → Profile** and scroll to **Guardian 2FA**
+2. Scan the QR code with your authenticator app, or enter the key manually
+3. Enter the 6-digit code from the app in **Code from the app**
+4. Click **Update Profile** — 2FA is now active for your account
 
-#### Setup 2FA for your account:
-1. Go to **Users → Your Profile** in WordPress admin
-2. Scroll to **Guardian 2FA Settings** section
-3. Choose authentication method (Google Authenticator or Email)
-4. For Google Authenticator: Scan the QR code with your app
-5. For Email: Verify your email address
-6. Enter the verification code
-7. Save backup codes in a safe place
-8. Click **Save Changes**
-
-#### Login with 2FA:
+### Log in with 2FA
 1. Enter your username and password as usual
-2. Enter the 6-digit code from your chosen method
-3. Click **Login**
+2. Enter the 6-digit code from the app
+3. After 5 wrong codes, start again from the password step
 
-### For Administrators:
-
-#### Enforce 2FA for user roles:
-1. Go to **Settings → Guardian 2FA**
-2. Select user roles that must use 2FA (Administrators, Editors, etc.)
-3. Set grace period for users to set up 2FA
-4. Click **Save Settings**
-
-#### View 2FA statistics:
-1. Go to **Users → 2FA Status**
-2. See which users have 2FA enabled
-3. View authentication logs
-
-## Authentication Methods
-
-### 1. Google Authenticator (TOTP)
-Time-based one-time passwords using industry-standard TOTP algorithm. Compatible with:
-- Google Authenticator
-- Microsoft Authenticator
-- Authy
-- Any TOTP-compatible app
-
-### 2. Email-based (Planned)
-Receive 6-digit codes via email. Useful for users who prefer not to use authenticator apps.
-
-### 3. Backup Codes (Planned)
-One-time use codes for emergency access when primary method is unavailable.
+### Turn off 2FA for a user (administrator)
+1. Open **Users → All Users** and edit the user
+2. In **Guardian 2FA**, check **Turn off 2FA for this account**
+3. Click **Update User**; the user can set up 2FA again on their profile
 
 ## Security
 
-- Uses industry-standard TOTP (RFC 6238) algorithm
-- Secure secret key generation
-- Rate limiting to prevent brute force attacks
-- Encrypted storage of user secrets
+- Secrets are generated with `random_int` (160 bits) and stored per user in user meta, in plain text — protect database access and backups.
+- Codes are compared in constant time; the previous, current, and next 30-second windows are accepted, and each window only once per user.
+- The pending login token is stored only as a SHA-256 hash.
+- Application passwords for the REST API are not affected by the plugin.
+- Use HTTPS so the token cookie is sent with the `Secure` flag.
+
+## Upgrading from 0.1.x
+
+Version 0.1.x used one secret for the whole site. That secret is deleted on activation of 0.2.0, and every user must set up 2FA on their profile again.
 
 ## Support
 
-For issues, questions, or feature requests, please use the [GitHub Issues](https://github.com/youwwwmaster/2FA-wordpress-login/issues) page.
+For issues, questions, or feature requests, please use the [GitHub Issues](https://github.com/Asia-Dev-Team/2FA-wordpress-login/issues) page.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## ☕ Support the Project
 
